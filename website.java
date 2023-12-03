@@ -51,33 +51,7 @@ public class website extends Application {
         System.out.println(AUTH_URL);
         
         startHttpServer();
-
-        WebView webView = new WebView();
-        WebEngine webEngine = webView.getEngine();
-        System.out.println("testing");
-        webEngine.getLoadWorker().stateProperty().addListener(
-        (obs, oldValue, newValue) -> {
-            if (Worker.State.SUCCEEDED.equals(newValue)) {
-                // Extract the authorization code from the URL
-                String currentUrl = webEngine.getLocation();
-                if (currentUrl != null && currentUrl.startsWith(REDIRECT_URI)) {
-                    String[] queryParams = currentUrl.split("\\?")[1].split("&");
-                    for (String param : queryParams) {
-                        if (param.startsWith("code=")) {
-                            authorizationCode = param.substring(5);
-                            System.out.println("Authorization Code: " + authorizationCode);
-                            // Now you can use the authorization code to obtain an access token
-                            // Implement the logic for token exchange
-                            exchangeCodeForToken();
-                            break;
-                        }
-                    }
-                }
-            }
-        });
-
-                webEngine.load(AUTH_URL);
-        //Label responseLabel = new Label("Authorization Code: " + authorizationCode);
+        
         Button openBrowserButton = new Button("Open Authentication URL");
         openBrowserButton.setOnAction(e -> openBrowserTab(AUTH_URL));
         TextField searchField = new TextField();
