@@ -1,16 +1,35 @@
+import javafx.animation.FadeTransition;
 import javafx.application.Application;
 import javafx.application.HostServices;
 import javafx.concurrent.Worker;
+import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-
+import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
+import javafx.stage.Modality;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
+import javafx.util.Duration;
+import javafx.animation.FadeTransition;
+import javafx.geometry.Pos;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -47,33 +66,66 @@ public class website extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("Spotify Authentication");
+        Screen primaryScreen = Screen.getPrimary();
+
+        // Get the bounds of the primary screen
+        Rectangle2D bounds = primaryScreen.getBounds();
+
+        double screenWidth = bounds.getWidth();
+        double screenHeight = bounds.getHeight();
+        primaryStage.setTitle("Music Website");
         System.out.println(AUTH_URL);
         
         startHttpServer();
-        
-        Button openBrowserButton = new Button("Open Authentication URL");
-        openBrowserButton.setOnAction(e -> openBrowserTab(AUTH_URL));
-        TextField searchField = new TextField();
-        Button searchButton = new Button("Search");
-        TextArea resultsArea = new TextArea();
 
-        // Event handler for the search button
+        Button openBrowserButton = new Button("Open Authentication URL"); // to be moved to the popup
+        openBrowserButton.setOnAction(e -> openBrowserTab(AUTH_URL));
+
+        TextField searchField = new TextField(); // search bar 
+        Button searchButton = new Button("Search"); // needst o be intergrated into search bar
+        TextArea resultsArea = new TextArea(); // will be changed to show all the music shown
+        searchField.setPromptText("Search...");
+        searchField.getStyleClass().add("search-field");
+        searchButton.getStyleClass().add("search-button");
+        
+        Menu homeMenu = new Menu("Home");
+        Menu libraryMenu = new Menu("Library");
+            MenuItem playlistItem = new MenuItem("Playlists");
+            MenuItem albumnItem = new MenuItem("Albumns");
+        libraryMenu.getItems().addAll(playlistItem, albumnItem);
+        Menu accountMenu = new Menu("Account");
+            MenuItem settingsItem = new MenuItem("Settings");
+            MenuItem logoutItem = new MenuItem("Logout");
+        accountMenu.getItems().addAll(settingsItem, logoutItem);
+        MenuBar menuBar = new MenuBar();
+        menuBar.getMenus().addAll(homeMenu, libraryMenu, accountMenu);
+
+        ScrollPane s1 = new ScrollPane();
+        BorderPane b1 = new BorderPane();
+        s1.setFitToWidth(true);
+        s1.setFitToHeight(true);
+        b1.setCenter(s1);
+        s1.setContent(b1);
         searchButton.setOnAction(e -> {
             String query = searchField.getText();
             String searchResults = searchSpotify(query);
             resultsArea.setText(searchResults);
         });
-
-        // Layout
+        Label title = new Label("title of website");
         VBox layout = new VBox(10);
-        layout.getChildren().addAll(searchField, searchButton, resultsArea,openBrowserButton);
-
-        // Scene
-        Scene scene = new Scene(layout, 400, 300);
+        HBox search = new HBox();
+        search.setAlignment(Pos.CENTER);
+        searchField.setPrefWidth(screenWidth/2);
+        search.getChildren().addAll(searchField,searchButton);
+        layout.getChildren().addAll(menuBar,title,search, resultsArea,openBrowserButton);
+        s1.setContent(layout);
+        Scene scene = new Scene(b1);
+        scene.getStylesheets().add(getClass().getResource("styles.css").toExternalForm());
+        primaryStage.setMaximized(true);
         primaryStage.setScene(scene);
         primaryStage.show();
-
+        showSignupOverlay(primaryStage); // overlay
+        
     }
 
     private static void exchangeCodeForToken() {
@@ -197,5 +249,29 @@ public class website extends Application {
     private void openBrowserTab(String url) {
         HostServices hostServices = getHostServices();
         hostServices.showDocument(url);
+    }
+    private void showSignupOverlay(Stage primaryStage) {
+        Stage overlayStage = new Stage();
+        overlayStage.initModality(Modality.APPLICATION_MODAL);
+        overlayStage.initOwner(primaryStage);
+
+        Rectangle overlay = new Rectangle(0, 0, 1, 1);
+        overlay.setFill(Color.rgb(0, 0, 0, 0.5)); // Semi-transparent black
+
+        VBox signupBox = new VBox(10);
+        signupBox.setAlignment(Pos.CENTER);
+        signupBox.getChildren().addAll(new Label("Sign up to receive updates and special offers!"));
+
+        StackPane overlayRoot = new StackPane();
+        overlayRoot.getChildren().addAll(overlay, signupBox);
+
+        Scene overlayScene = new Scene(overlayRoot, 300, 150);
+        overlayStage.setScene(overlayScene);
+
+        overlay.widthProperty().bind(overlayStage.widthProperty());
+        overlay.heightProperty().bind(overlayStage.heightProperty());
+        overlayScene.widthProperty().addListener((obs, oldVal, newVal) -> signupBox.setMinWidth(newVal.doubleValue()));
+
+        overlayStage.showAndWait();
     }
 }
