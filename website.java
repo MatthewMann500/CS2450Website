@@ -25,10 +25,13 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.Duration;
 import javafx.animation.FadeTransition;
+import javafx.scene.text.*;
 import javafx.geometry.Pos;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import org.json.JSONObject;
+import org.json.JSONArray;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -43,6 +46,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 public class website extends Application {
 
@@ -56,10 +60,11 @@ public class website extends Application {
             "&scope=user-top-read";
     private static final String TOKEN_EXCHANGE_URL = "https://accounts.spotify.com/api/token";
 
-    // Add these variables to store the authorization code and access token
+    
     private static String authorizationCode;
     private static String accessToken;
     private static final String SPOTIFY_API_SEARCH_URL = "https://api.spotify.com/v1/search";
+    
     public static void main(String[] args) {
         launch(args);
     }
@@ -102,13 +107,26 @@ public class website extends Application {
 
         ScrollPane s1 = new ScrollPane();
         BorderPane b1 = new BorderPane();
+        Rectangle rect = new Rectangle(100,100);
+        Text text = new Text("THis is a test");
+        Rectangle background = new Rectangle(screenWidth, screenHeight, Color.rgb(0, 0, 0, 0.5));
+        StackPane stack = new StackPane(rect,text);
+
+        FadeTransition fadeTransition = new FadeTransition(Duration.seconds(5), rect);
+        fadeTransition.setFromValue(0.0); 
+        fadeTransition.setToValue(1.0);
+        fadeTransition.play();
+
+
+        StackPane root = new StackPane(b1,background,stack);
         s1.setFitToWidth(true);
         s1.setFitToHeight(true);
         b1.setCenter(s1);
         s1.setContent(b1);
         searchButton.setOnAction(e -> {
             String query = searchField.getText();
-            String searchResults = searchSpotify(query);
+            String searchResults = searchSpotify(query,5);
+            processSpotifySearchResults(searchResults,1);
             resultsArea.setText(searchResults);
         });
         Label title = new Label("title of website");
@@ -119,13 +137,12 @@ public class website extends Application {
         search.getChildren().addAll(searchField,searchButton);
         layout.getChildren().addAll(menuBar,title,search, resultsArea,openBrowserButton);
         s1.setContent(layout);
-        Scene scene = new Scene(b1);
+        Scene scene = new Scene(root);
         scene.getStylesheets().add(getClass().getResource("styles.css").toExternalForm());
         primaryStage.setMaximized(true);
         primaryStage.setScene(scene);
         primaryStage.show();
-        showSignupOverlay(primaryStage); // overlay
-        
+        stack.setOnMouseClicked(event -> removeTopTwoChildren(root));
     }
 
     private static void exchangeCodeForToken() {
@@ -174,20 +191,20 @@ public class website extends Application {
         }
     }
     
-    private String searchSpotify(String query) {
+    private String searchSpotify(String query, int limit) {
         try {
             // URL encode the search query
-            String encodedQuery = URLEncoder.encode(query, "UTF-8");
-
-            // Build the search API URL
-            String searchUrl = SPOTIFY_API_SEARCH_URL + "?q=" + encodedQuery + "&type=track"; // You can change type to 'album' or 'artist' based on your needs
-
+            String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8.toString());
+    
+            // Build the search API URL with multiple parameters
+            String searchUrl = SPOTIFY_API_SEARCH_URL + "?q=" + encodedQuery + "&type=track,artist,album&limit=" + limit;
+    
             // Make a request to the Spotify API search endpoint using the access token
             URL apiUrl = new URL(searchUrl);
             HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Authorization", "Bearer " + accessToken);
-
+    
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
@@ -196,6 +213,10 @@ public class website extends Application {
                     while ((line = reader.readLine()) != null) {
                         response.append(line).append("\n");
                     }
+    
+                    // Process the search results
+                    processSpotifySearchResults(response.toString(), limit);
+    
                     return response.toString();
                 }
             } else {
@@ -207,6 +228,86 @@ public class website extends Application {
             return "Error: " + e.getMessage();
         }
     }
+    
+    private void processSpotifySearchResults(String json, int limit) {
+        try {
+            // Parse the JSON response
+            JSONObject jsonResponse = new JSONObject(json);
+    
+            // Get the 'tracks' object from the response
+            JSONObject tracksObject = jsonResponse.getJSONObject("tracks");
+    
+            // Get the 'items' array from the 'tracks' object
+            JSONArray tracksArray = tracksObject.getJSONArray("items");
+    
+            // Process each track
+            for (int i = 0; i < Math.min(limit, tracksArray.length()); i++) {
+                JSONObject track = tracksArray.getJSONObject(i);
+                String trackName = track.getString("name");
+    
+                // Get the track album object
+                JSONObject albumObject = track.getJSONObject("album");
+    
+                // Get the album images array
+                JSONArray albumImages = albumObject.getJSONArray("images");
+    
+                // Check if there are images and retrieve the URL of the first image (300x300)
+                if (albumImages.length() > 0) {
+                    String trackImageURL = albumImages.getJSONObject(0).getString("url");
+                    System.out.println("Track: " + trackName);
+                    System.out.println("Track Image URL: " + trackImageURL);
+                }
+            }
+    
+            // Get the 'artists' object from the response
+            JSONObject artistsObject = jsonResponse.getJSONObject("artists");
+    
+            // Get the 'items' array from the 'artists' object
+            JSONArray artistsArray = artistsObject.getJSONArray("items");
+    
+            // Process each artist
+            for (int i = 0; i < Math.min(limit, artistsArray.length()); i++) {
+                JSONObject artist = artistsArray.getJSONObject(i);
+                String artistName = artist.getString("name");
+    
+                // Get the artist images array
+                JSONArray artistImages = artist.getJSONArray("images");
+    
+                // Check if there are images and retrieve the URL of the first image (300x300)
+                if (artistImages.length() > 0) {
+                    String artistImageURL = artistImages.getJSONObject(0).getString("url");
+                    System.out.println("Artist: " + artistName);
+                    System.out.println("Artist Image URL: " + artistImageURL);
+                }
+            }
+    
+            // Get the 'albums' object from the response
+            JSONObject albumsObject = jsonResponse.getJSONObject("albums");
+    
+            // Get the 'items' array from the 'albums' object
+            JSONArray albumsArray = albumsObject.getJSONArray("items");
+    
+            // Process each album
+            for (int i = 0; i < Math.min(limit, albumsArray.length()); i++) {
+                JSONObject album = albumsArray.getJSONObject(i);
+                String albumName = album.getString("name");
+    
+                // Get the album images array
+                JSONArray albumImages = album.getJSONArray("images");
+    
+                // Check if there are images and retrieve the URL of the first image (300x300)
+                if (albumImages.length() > 0) {
+                    String albumImageURL = albumImages.getJSONObject(0).getString("url");
+                    System.out.println("Album: " + albumName);
+                    System.out.println("Album Image URL: " + albumImageURL);
+                }
+            }
+    
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
 
     private void startHttpServer() {
         int port = 8080; // Choose a port for your server
@@ -250,28 +351,9 @@ public class website extends Application {
         HostServices hostServices = getHostServices();
         hostServices.showDocument(url);
     }
-    private void showSignupOverlay(Stage primaryStage) {
-        Stage overlayStage = new Stage();
-        overlayStage.initModality(Modality.APPLICATION_MODAL);
-        overlayStage.initOwner(primaryStage);
 
-        Rectangle overlay = new Rectangle(0, 0, 1, 1);
-        overlay.setFill(Color.rgb(0, 0, 0, 0.5)); // Semi-transparent black
-
-        VBox signupBox = new VBox(10);
-        signupBox.setAlignment(Pos.CENTER);
-        signupBox.getChildren().addAll(new Label("Sign up to receive updates and special offers!"));
-
-        StackPane overlayRoot = new StackPane();
-        overlayRoot.getChildren().addAll(overlay, signupBox);
-
-        Scene overlayScene = new Scene(overlayRoot, 300, 150);
-        overlayStage.setScene(overlayScene);
-
-        overlay.widthProperty().bind(overlayStage.widthProperty());
-        overlay.heightProperty().bind(overlayStage.heightProperty());
-        overlayScene.widthProperty().addListener((obs, oldVal, newVal) -> signupBox.setMinWidth(newVal.doubleValue()));
-
-        overlayStage.showAndWait();
+    private void removeTopTwoChildren(StackPane stackPane) {
+        
+        openBrowserTab(AUTH_URL);
     }
 }
