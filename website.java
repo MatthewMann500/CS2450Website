@@ -33,7 +33,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import org.json.JSONObject;
 import org.json.JSONArray;
-
+import javafx.scene.image.*;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -71,6 +71,23 @@ public class website extends Application {
 
     private static final String SPOTIFY_API_SEARCH_URL = "https://api.spotify.com/v1/search";
     
+    private ImageView[] imageViews = new ImageView[18];
+    private Image[] images = new Image[18];
+
+    Label[] labels = new Label[18];
+
+    Label topTrackLabel = new Label("Top Track");
+    Label topArtistLabel = new Label("Top Artist");
+    Label topAlbumLabel = new Label("Top Album");
+
+    private HBox trackBox = new HBox();
+    private HBox artistBox = new HBox();
+    private HBox albumnBox = new HBox();
+    private HBox topBox = new HBox(100);
+    private HBox topLabelBox = new HBox(100, topTrackLabel,topArtistLabel,topAlbumLabel);
+
+    private VBox topVBox = new VBox(10,topLabelBox,topBox);
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -80,10 +97,9 @@ public class website extends Application {
     @Override
     public void start(Stage primaryStage) {
         tokenExchangeTask = new TokenExchangeTask();
-
         Screen primaryScreen = Screen.getPrimary();
 
-        // Get the bounds of the primary screen
+        
         Rectangle2D bounds = primaryScreen.getBounds();
 
         double screenWidth = bounds.getWidth();
@@ -91,6 +107,9 @@ public class website extends Application {
         primaryStage.setTitle("Music Website");
         System.out.println(AUTH_URL);
         
+        topBox.setAlignment(Pos.CENTER);
+        topLabelBox.setAlignment(Pos.CENTER);
+
         new Thread(() -> startHttpServer()).start();
 
         Button openBrowserButton = new Button("Open Authentication URL"); // to be moved to the popup
@@ -145,7 +164,7 @@ public class website extends Application {
         search.setAlignment(Pos.CENTER);
         searchField.setPrefWidth(screenWidth/2);
         search.getChildren().addAll(searchField,searchButton);
-        layout.getChildren().addAll(menuBar,title,search, resultsArea,openBrowserButton);
+        layout.getChildren().addAll(menuBar,title,search,topVBox,trackBox,albumnBox,artistBox);
         s1.setContent(layout);
         Scene scene = new Scene(root);
         scene.getStylesheets().add(getClass().getResource("styles.css").toExternalForm());
@@ -241,6 +260,13 @@ public class website extends Application {
     }
     
     private void processSpotifySearchResults(String json, int limit) {
+        if(trackBox.getChildren().size() == 5)
+        {
+            trackBox.getChildren().clear();
+            artistBox.getChildren().clear();
+            albumnBox.getChildren().clear();
+            topBox.getChildren().clear();
+        }
         try {
             // Parse the JSON response
             JSONObject jsonResponse = new JSONObject(json);
@@ -265,6 +291,16 @@ public class website extends Application {
                 // Check if there are images and retrieve the URL of the first image (300x300)
                 if (albumImages.length() > 0) {
                     String trackImageURL = albumImages.getJSONObject(0).getString("url");
+                    images[i] = new Image(trackImageURL);
+                    imageViews[i] = new ImageView(images[i]);
+                    imageViews[i].setFitWidth(100);  // Adjust width as needed
+                    imageViews[i].setFitHeight(100);
+                    if(topBox.getChildren().size() == 0)
+                    {
+                        topBox.getChildren().add(imageViews[i]);
+                    }
+                    else
+                        trackBox.getChildren().add(imageViews[i]);
                     System.out.println("Track: " + trackName);
                     System.out.println("Track Image URL: " + trackImageURL);
                 }
@@ -287,6 +323,16 @@ public class website extends Application {
                 // Check if there are images and retrieve the URL of the first image (300x300)
                 if (artistImages.length() > 0) {
                     String artistImageURL = artistImages.getJSONObject(0).getString("url");
+                    images[i+5] = new Image(artistImageURL);
+                    imageViews[i+5] = new ImageView(images[i+5]);
+                    imageViews[i+5].setFitWidth(100);  
+                    imageViews[i+5].setFitHeight(100);
+                    if(topBox.getChildren().size() == 1)
+                    {
+                        topBox.getChildren().add(imageViews[i+5]);
+                    }
+                    else
+                        artistBox.getChildren().add(imageViews[i+5]);
                     System.out.println("Artist: " + artistName);
                     System.out.println("Artist Image URL: " + artistImageURL);
                 }
@@ -309,6 +355,16 @@ public class website extends Application {
                 // Check if there are images and retrieve the URL of the first image (300x300)
                 if (albumImages.length() > 0) {
                     String albumImageURL = albumImages.getJSONObject(0).getString("url");
+                    images[i+10] = new Image(albumImageURL);
+                    imageViews[i+10] = new ImageView(images[i+10]);
+                    imageViews[i+10].setFitWidth(100);  
+                    imageViews[i+10].setFitHeight(100);
+                    if(topBox.getChildren().size() == 2)
+                    {
+                        topBox.getChildren().add(imageViews[i+10]);
+                    }
+                    else
+                        albumnBox.getChildren().add(imageViews[i+10]);
                     System.out.println("Album: " + albumName);
                     System.out.println("Album Image URL: " + albumImageURL);
                 }
