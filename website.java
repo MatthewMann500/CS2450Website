@@ -37,6 +37,7 @@ import javafx.scene.image.*;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import java.awt.Desktop;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -51,7 +52,14 @@ import java.nio.charset.StandardCharsets;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 
+import javazoom.*;
+import javazoom.jl.decoder.JavaLayerErrors;
+import javazoom.jl.decoder.JavaLayerException;
+import javazoom.jl.player.advanced.AdvancedPlayer;
+import javazoom.jl.player.advanced.PlaybackEvent;
+import javazoom.jl.player.advanced.PlaybackListener;
 
+import java.io.InputStream;
 public class website extends Application {
 
     private static final String CLIENT_ID = "d8738858dcb440c1862f5a00da61a945";
@@ -64,7 +72,8 @@ public class website extends Application {
             "&scope=user-top-read";
     private static final String TOKEN_EXCHANGE_URL = "https://accounts.spotify.com/api/token";
 
-    
+    private AdvancedPlayer player;
+
     private static String authorizationCode;
     private static String accessToken;
     private static TokenExchangeTask tokenExchangeTask;
@@ -74,17 +83,20 @@ public class website extends Application {
     private ImageView[] imageViews = new ImageView[18];
     private Image[] images = new Image[18];
 
+    String trackUrl = "";
+    private WebView webView = new WebView();
+    private WebEngine webEngine;
     Label[] labels = new Label[18];
 
     Label topTrackLabel = new Label("Top Track");
     Label topArtistLabel = new Label("Top Artist");
     Label topAlbumLabel = new Label("Top Album");
 
-    private HBox trackBox = new HBox();
-    private HBox artistBox = new HBox();
-    private HBox albumnBox = new HBox();
-    private HBox topBox = new HBox(100);
-    private HBox topLabelBox = new HBox(100, topTrackLabel,topArtistLabel,topAlbumLabel);
+    private HBox trackBox = new HBox(100);
+    private HBox artistBox = new HBox(100);
+    private HBox albumnBox = new HBox(100);
+    private HBox topBox = new HBox(300);
+    private HBox topLabelBox = new HBox(350, topTrackLabel,topArtistLabel,topAlbumLabel);
 
     private VBox topVBox = new VBox(10,topLabelBox,topBox);
 
@@ -99,7 +111,11 @@ public class website extends Application {
         tokenExchangeTask = new TokenExchangeTask();
         Screen primaryScreen = Screen.getPrimary();
 
-        
+        Button playButton = new Button("Play");
+        playButton.setOnAction(e -> {openSpotifyTrack();});
+        Button stopButton = new Button("Stop");
+        webEngine = webView.getEngine();
+
         Rectangle2D bounds = primaryScreen.getBounds();
 
         double screenWidth = bounds.getWidth();
@@ -108,6 +124,9 @@ public class website extends Application {
         System.out.println(AUTH_URL);
         
         topBox.setAlignment(Pos.CENTER);
+        artistBox.setAlignment(Pos.CENTER);
+        albumnBox.setAlignment(Pos.CENTER);
+        trackBox.setAlignment(Pos.CENTER);
         topLabelBox.setAlignment(Pos.CENTER);
 
         new Thread(() -> startHttpServer()).start();
@@ -117,7 +136,6 @@ public class website extends Application {
 
         TextField searchField = new TextField(); // search bar 
         Button searchButton = new Button("Search"); // needst o be intergrated into search bar
-        TextArea resultsArea = new TextArea(); // will be changed to show all the music shown
         searchField.setPromptText("Search...");
         searchField.getStyleClass().add("search-field");
         searchButton.getStyleClass().add("search-button");
@@ -152,19 +170,13 @@ public class website extends Application {
         s1.setFitToHeight(true);
         b1.setCenter(s1);
         s1.setContent(b1);
-        searchButton.setOnAction(e -> {
-            String query = searchField.getText();
-            String searchResults = searchSpotify(query,5);
-            processSpotifySearchResults(searchResults,1);
-            resultsArea.setText(searchResults);
-        });
         Label title = new Label("title of website");
         VBox layout = new VBox(10);
         HBox search = new HBox();
         search.setAlignment(Pos.CENTER);
         searchField.setPrefWidth(screenWidth/2);
         search.getChildren().addAll(searchField,searchButton);
-        layout.getChildren().addAll(menuBar,title,search,topVBox,trackBox,albumnBox,artistBox);
+        layout.getChildren().addAll(menuBar,title,search,playButton,stopButton);
         s1.setContent(layout);
         Scene scene = new Scene(root);
         scene.getStylesheets().add(getClass().getResource("styles.css").toExternalForm());
@@ -172,6 +184,13 @@ public class website extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
         stack.setOnMouseClicked(event -> removeTopTwoChildren(root));
+        searchButton.setOnAction(e -> {
+            String query = searchField.getText();
+            String searchResults = searchSpotify(query,5);
+            processSpotifySearchResults(searchResults,1);
+            layout.getChildren().remove(title);
+            layout.getChildren().addAll(topVBox,trackBox,albumnBox,artistBox);
+        });
     }
 
     private static void exchangeCodeForToken() {
@@ -281,7 +300,9 @@ public class website extends Application {
             for (int i = 0; i < Math.min(limit, tracksArray.length()); i++) {
                 JSONObject track = tracksArray.getJSONObject(i);
                 String trackName = track.getString("name");
-    
+                
+                JSONObject externalUrls = track.getJSONObject("external_urls");
+                trackUrl = externalUrls.getString("spotify");
                 // Get the track album object
                 JSONObject albumObject = track.getJSONObject("album");
     
@@ -393,26 +414,33 @@ public class website extends Application {
 
     static class AuthHandler implements HttpHandler {
         @Override
-        public void handle(HttpExchange t) throws IOException {
-            URI requestUri = t.getRequestURI();
-            String query = requestUri.getQuery();
-            String response = "Authentication code not found.";
-    
-            System.out.println("Received query: " + query);  // Debug print
-    
-            if (query != null && query.contains("code=")) {
-                authorizationCode = query.split("code=")[1];
-                System.out.println("Authorization code received: " + authorizationCode);  // Debug print
-                new Thread(tokenExchangeTask).start();
-                response = "Authentication code received successfully. You can close this window.";
-                exchangeCodeForToken();
-            }
-    
-            t.sendResponseHeaders(200, response.length());
-            try (OutputStream os = t.getResponseBody()) {
-                os.write(response.getBytes());
-            }
+public void handle(HttpExchange t) throws IOException {
+    URI requestUri = t.getRequestURI();
+    String query = requestUri.getQuery();
+    String response = "Authentication code not found.";
+
+    System.out.println("Received query: " + query);  // Debug print
+
+    try {
+        if (query != null && query.contains("code=")) {
+            authorizationCode = query.split("code=")[1];
+            System.out.println("Authorization code received: " + authorizationCode);  // Debug print
+            new Thread(tokenExchangeTask).start();
+            response = "Authentication code received successfully. You can close this window.";
+            exchangeCodeForToken();
         }
+    } catch (Exception e) {
+        e.printStackTrace();
+        response = "Error processing authentication code.";
+    }
+
+    t.sendResponseHeaders(200, response.length());
+    try (OutputStream os = t.getResponseBody()) {
+        os.write(response.getBytes());
+    }
+}
+
+
     }
     
     private void openBrowserTab(String url) {
@@ -434,5 +462,54 @@ public class website extends Application {
         exchangeCodeForToken();
         return null;
     }
+    }
+    
+    private void openSpotifyTrack() {
+        try{
+        webEngine = webView.getEngine(); // Initialize the WebEngine
+
+
+        StringBuilder scriptBuilder = new StringBuilder();
+
+scriptBuilder.append("window.onSpotifyWebPlaybackSDKReady = () => {");
+scriptBuilder.append("console.log('Spotify SDK is ready.');");
+scriptBuilder.append("const player = new Spotify.Player({");
+scriptBuilder.append("name: 'Your App Name',");
+scriptBuilder.append("getOAuthToken: cb => { cb('"+ accessToken +"'); },"); // Use the injected token
+scriptBuilder.append("});");
+scriptBuilder.append("player.addListener('ready', ({ device_id }) => {");
+scriptBuilder.append("console.log('Spotify player is ready.');");
+scriptBuilder.append("console.log('Device ID', device_id);");
+// Add the code to play a specific song
+scriptBuilder.append("player.play({ uris: ['https://open.spotify.com/track/3GCL1PydwsLodcpv0Ll1ch?si=b6e47c84a75547cd&nd=1&dlsi=ead3cd89d5c44742'] });"); // Replace TRACK_URI with the actual URI of the song
+scriptBuilder.append("});");
+scriptBuilder.append("player.connect();");
+scriptBuilder.append("window.spotifyPlayer = player;");
+scriptBuilder.append("};");
+
+String script = scriptBuilder.toString();
+
+        // Load HTML content into the WebView
+        String htmlContent = "<html><head>" +
+        "<script src='https://sdk.scdn.co/spotify-player.js'></script>" +
+        "</head><body></body></html>";
+
+        webEngine.loadContent(htmlContent);
+
+        System.out.println(accessToken);
+        webEngine.getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == Worker.State.SUCCEEDED) {
+                // WebView is fully loaded, now inject your JavaScript code
+                webEngine.executeScript(script);
+            }
+        });
+        topVBox.getChildren().add(webView);
+        
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Error loading content into WebView: " + e.getMessage());
+        }
+    }
+
 }
-}
+
