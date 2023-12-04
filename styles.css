@@ -1,0 +1,18 @@
+.search-field{
+    -fx-pref-height: 30;
+    -fx-padding: 0 10;
+    -fx-font-size: 14;
+    -fx-border-color: #3498db;
+    -fx-border-width: 2;
+    -fx-background-color: white;
+    -fx-prompt-text-fill: #7f8c8d;
+}
+.search-button {
+    -fx-background-color: #3498db;
+    -fx-border-radius: 0;
+    -fx-pref-height: 30;
+    -fx-min-width: 30;
+}
+.search-button:hover {
+    -fx-background-color: #2980b9;
+}
