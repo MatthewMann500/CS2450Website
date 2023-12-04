@@ -1,6 +1,7 @@
 import javafx.animation.FadeTransition;
 import javafx.application.Application;
 import javafx.application.HostServices;
+import javafx.concurrent.Task;
 import javafx.concurrent.Worker;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
@@ -66,6 +67,8 @@ public class website extends Application {
     
     private static String authorizationCode;
     private static String accessToken;
+    private static TokenExchangeTask tokenExchangeTask;
+
     private static final String SPOTIFY_API_SEARCH_URL = "https://api.spotify.com/v1/search";
     
     public static void main(String[] args) {
@@ -76,6 +79,8 @@ public class website extends Application {
     int height = gd.getDisplayMode().getHeight();
     @Override
     public void start(Stage primaryStage) {
+        tokenExchangeTask = new TokenExchangeTask();
+
         Screen primaryScreen = Screen.getPrimary();
 
         // Get the bounds of the primary screen
@@ -86,7 +91,7 @@ public class website extends Application {
         primaryStage.setTitle("Music Website");
         System.out.println(AUTH_URL);
         
-        startHttpServer();
+        new Thread(() -> startHttpServer()).start();
 
         Button openBrowserButton = new Button("Open Authentication URL"); // to be moved to the popup
         openBrowserButton.setOnAction(e -> openBrowserTab(AUTH_URL));
@@ -186,6 +191,7 @@ public class website extends Application {
                     // Note: In a real application, you would use a JSON parsing library like Gson
                     accessToken = response.toString().split("\"access_token\":\"")[1].split("\"")[0];
                     System.out.println("Access Token: " + accessToken);
+                    tokenExchangeTask.isDone();
                 }
             } else {
                 System.out.println("Token Exchange Error: " + responseCode);
@@ -341,6 +347,7 @@ public class website extends Application {
             if (query != null && query.contains("code=")) {
                 authorizationCode = query.split("code=")[1];
                 System.out.println("Authorization code received: " + authorizationCode);  // Debug print
+                new Thread(tokenExchangeTask).start();
                 response = "Authentication code received successfully. You can close this window.";
                 exchangeCodeForToken();
             }
@@ -358,7 +365,18 @@ public class website extends Application {
     }
 
     private void removeTopTwoChildren(StackPane stackPane) {
-        
+        tokenExchangeTask.setOnSucceeded(event -> {
+            stackPane.getChildren().remove(stackPane.getChildren().size() - 1);
+            stackPane.getChildren().remove(stackPane.getChildren().size() - 1);
+        });
         openBrowserTab(AUTH_URL);
+        
     }
+    public class TokenExchangeTask extends Task<Void> {
+    @Override
+    protected Void call() throws Exception {
+        exchangeCodeForToken();
+        return null;
+    }
+}
 }
