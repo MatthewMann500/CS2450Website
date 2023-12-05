@@ -25,10 +25,7 @@ import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.Duration;
-import javafx.animation.FadeTransition;
 import javafx.scene.text.*;
-import javafx.geometry.Pos;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import org.json.JSONObject;
@@ -37,7 +34,6 @@ import javafx.scene.image.*;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import java.awt.Desktop;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -52,12 +48,6 @@ import java.nio.charset.StandardCharsets;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 
-import javazoom.*;
-import javazoom.jl.decoder.JavaLayerErrors;
-import javazoom.jl.decoder.JavaLayerException;
-import javazoom.jl.player.advanced.AdvancedPlayer;
-import javazoom.jl.player.advanced.PlaybackEvent;
-import javazoom.jl.player.advanced.PlaybackListener;
 
 import java.io.InputStream;
 public class website extends Application {
@@ -69,16 +59,22 @@ public class website extends Application {
             "?client_id=" + CLIENT_ID +
             "&response_type=code" +
             "&redirect_uri=" + REDIRECT_URI +
-            "&scope=user-top-read";
+            "&scope=user-modify-playback-state user-read-playback-state user-top-read";
     private static final String TOKEN_EXCHANGE_URL = "https://accounts.spotify.com/api/token";
-
-    private AdvancedPlayer player;
 
     private static String authorizationCode;
     private static String accessToken;
     private static TokenExchangeTask tokenExchangeTask;
+    private static String playbackAccessToken;
+    private static JSONArray devicesArray;
+
+
+private static String activatedDeviceId;
+    private static final String SPOTIFY_AVAILABLE_DEVICES_API_URL = "https://api.spotify.com/v1/me/player/devices";
 
     private static final String SPOTIFY_API_SEARCH_URL = "https://api.spotify.com/v1/search";
+    private static final String SPOTIFY_PLAYBACK_SCOPE = "user-modify-playback-state";
+    private static final String SPOTIFY_PLAYBACK_API_URL = "https://api.spotify.com/v1/me/player/play";
     
     private ImageView[] imageViews = new ImageView[18];
     private Image[] images = new Image[18];
@@ -99,6 +95,7 @@ public class website extends Application {
     private HBox topLabelBox = new HBox(350, topTrackLabel,topArtistLabel,topAlbumLabel);
 
     private VBox topVBox = new VBox(10,topLabelBox,topBox);
+    VBox layout = new VBox(10);
 
     public static void main(String[] args) {
         launch(args);
@@ -108,13 +105,18 @@ public class website extends Application {
     int height = gd.getDisplayMode().getHeight();
     @Override
     public void start(Stage primaryStage) {
+        webEngine = webView.getEngine();
+        
+
         tokenExchangeTask = new TokenExchangeTask();
         Screen primaryScreen = Screen.getPrimary();
-
+        String userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134";
+        webEngine.setUserAgent(userAgent);
         Button playButton = new Button("Play");
-        playButton.setOnAction(e -> {openSpotifyTrack();});
+        playButton.setOnAction(e -> {
+            
+        });
         Button stopButton = new Button("Stop");
-        webEngine = webView.getEngine();
 
         Rectangle2D bounds = primaryScreen.getBounds();
 
@@ -129,7 +131,7 @@ public class website extends Application {
         trackBox.setAlignment(Pos.CENTER);
         topLabelBox.setAlignment(Pos.CENTER);
 
-        new Thread(() -> startHttpServer()).start();
+        new Thread(this::startHttpServer).start();
 
         Button openBrowserButton = new Button("Open Authentication URL"); // to be moved to the popup
         openBrowserButton.setOnAction(e -> openBrowserTab(AUTH_URL));
@@ -164,7 +166,7 @@ public class website extends Application {
         fadeTransition.setToValue(1.0);
         fadeTransition.play();
 
-
+        
         StackPane root = new StackPane(b1,background,stack);
         s1.setFitToWidth(true);
         s1.setFitToHeight(true);
@@ -193,52 +195,52 @@ public class website extends Application {
         });
     }
 
-    private static void exchangeCodeForToken() {
-        try {
-            // Construct the token exchange request body
-            String requestBody = "grant_type=authorization_code" +
-                    "&code=" + URLEncoder.encode(authorizationCode, "UTF-8") +
-                    "&redirect_uri=" + URLEncoder.encode(REDIRECT_URI, "UTF-8") +
-                    "&client_id=" + URLEncoder.encode(CLIENT_ID, "UTF-8") +
-                    "&client_secret=" + URLEncoder.encode(CLIENT_SECRET, "UTF-8");
+    // private static void exchangeCodeForToken() {
+    //     try {
+    //         // Construct the token exchange request body
+    //         String requestBody = "grant_type=authorization_code" +
+    //                 "&code=" + URLEncoder.encode(authorizationCode, "UTF-8") +
+    //                 "&redirect_uri=" + URLEncoder.encode(REDIRECT_URI, "UTF-8") +
+    //                 "&client_id=" + URLEncoder.encode(CLIENT_ID, "UTF-8") +
+    //                 "&client_secret=" + URLEncoder.encode(CLIENT_SECRET, "UTF-8");
     
-            // Make a POST request to the token exchange URL
-            URL tokenUrl = new URL(TOKEN_EXCHANGE_URL);
-            HttpURLConnection tokenConnection = (HttpURLConnection) tokenUrl.openConnection();
-            tokenConnection.setRequestMethod("POST");
-            tokenConnection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            tokenConnection.setDoOutput(true);
+    //         // Make a POST request to the token exchange URL
+    //         URL tokenUrl = new URL(TOKEN_EXCHANGE_URL);
+    //         HttpURLConnection tokenConnection = (HttpURLConnection) tokenUrl.openConnection();
+    //         tokenConnection.setRequestMethod("POST");
+    //         tokenConnection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+    //         tokenConnection.setDoOutput(true);
     
-            // Write the request body to the connection
-            try (OutputStream os = tokenConnection.getOutputStream()) {
-                byte[] input = requestBody.getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
+    //         // Write the request body to the connection
+    //         try (OutputStream os = tokenConnection.getOutputStream()) {
+    //             byte[] input = requestBody.getBytes("utf-8");
+    //             os.write(input, 0, input.length);
+    //         }
     
-            int responseCode = tokenConnection.getResponseCode();
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                // Parse the response to extract the access token
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(tokenConnection.getInputStream()))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
+    //         int responseCode = tokenConnection.getResponseCode();
+    //         if (responseCode == HttpURLConnection.HTTP_OK) {
+    //             // Parse the response to extract the access token
+    //             try (BufferedReader reader = new BufferedReader(new InputStreamReader(tokenConnection.getInputStream()))) {
+    //                 StringBuilder response = new StringBuilder();
+    //                 String line;
+    //                 while ((line = reader.readLine()) != null) {
+    //                     response.append(line);
+    //                 }
     
-                    // Extract the access token from the JSON response
-                    // Note: In a real application, you would use a JSON parsing library like Gson
-                    accessToken = response.toString().split("\"access_token\":\"")[1].split("\"")[0];
-                    System.out.println("Access Token: " + accessToken);
-                    tokenExchangeTask.isDone();
-                }
-            } else {
-                System.out.println("Token Exchange Error: " + responseCode);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            System.out.println("Token Exchange Exception: " + e.getMessage());
-        }
-    }
+    //                 // Extract the access token from the JSON response
+    //                 // Note: In a real application, you would use a JSON parsing library like Gson
+    //                 accessToken = response.toString().split("\"access_token\":\"")[1].split("\"")[0];
+    //                 System.out.println("Access Token: " + accessToken);
+    //                 tokenExchangeTask.isDone();
+    //             }
+    //         } else {
+    //             System.out.println("Token Exchange Error: " + responseCode);
+    //         }
+    //     } catch (IOException e) {
+    //         e.printStackTrace();
+    //         System.out.println("Token Exchange Exception: " + e.getMessage());
+    //     }
+    // }
     
     private String searchSpotify(String query, int limit) {
         try {
@@ -252,7 +254,7 @@ public class website extends Application {
             URL apiUrl = new URL(searchUrl);
             HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("GET");
-            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+            connection.setRequestProperty("Authorization", "Bearer " + playbackAccessToken);
     
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
@@ -324,6 +326,7 @@ public class website extends Application {
                         trackBox.getChildren().add(imageViews[i]);
                     System.out.println("Track: " + trackName);
                     System.out.println("Track Image URL: " + trackImageURL);
+                    System.out.println("Track Image URL: " + trackUrl);
                 }
             }
     
@@ -337,10 +340,9 @@ public class website extends Application {
             for (int i = 0; i < Math.min(limit, artistsArray.length()); i++) {
                 JSONObject artist = artistsArray.getJSONObject(i);
                 String artistName = artist.getString("name");
-    
+                
                 // Get the artist images array
                 JSONArray artistImages = artist.getJSONArray("images");
-    
                 // Check if there are images and retrieve the URL of the first image (300x300)
                 if (artistImages.length() > 0) {
                     String artistImageURL = artistImages.getJSONObject(0).getString("url");
@@ -427,7 +429,6 @@ public void handle(HttpExchange t) throws IOException {
             System.out.println("Authorization code received: " + authorizationCode);  // Debug print
             new Thread(tokenExchangeTask).start();
             response = "Authentication code received successfully. You can close this window.";
-            exchangeCodeForToken();
         }
     } catch (Exception e) {
         e.printStackTrace();
@@ -456,10 +457,12 @@ public void handle(HttpExchange t) throws IOException {
         openBrowserTab(AUTH_URL);
         
     }
+    
     public class TokenExchangeTask extends Task<Void> {
     @Override
     protected Void call() throws Exception {
-        exchangeCodeForToken();
+        exchangeCodeForPlaybackToken();
+        playSpotifyTrack("spotify:track:1BxfuPKGuaTgP7aM0Bbdwr");
         return null;
     }
     }
@@ -467,43 +470,9 @@ public void handle(HttpExchange t) throws IOException {
     private void openSpotifyTrack() {
         try{
         webEngine = webView.getEngine(); // Initialize the WebEngine
-
-
-        StringBuilder scriptBuilder = new StringBuilder();
-
-scriptBuilder.append("window.onSpotifyWebPlaybackSDKReady = () => {");
-scriptBuilder.append("console.log('Spotify SDK is ready.');");
-scriptBuilder.append("const player = new Spotify.Player({");
-scriptBuilder.append("name: 'Your App Name',");
-scriptBuilder.append("getOAuthToken: cb => { cb('"+ accessToken +"'); },"); // Use the injected token
-scriptBuilder.append("});");
-scriptBuilder.append("player.addListener('ready', ({ device_id }) => {");
-scriptBuilder.append("console.log('Spotify player is ready.');");
-scriptBuilder.append("console.log('Device ID', device_id);");
-// Add the code to play a specific song
-scriptBuilder.append("player.play({ uris: ['https://open.spotify.com/track/3GCL1PydwsLodcpv0Ll1ch?si=b6e47c84a75547cd&nd=1&dlsi=ead3cd89d5c44742'] });"); // Replace TRACK_URI with the actual URI of the song
-scriptBuilder.append("});");
-scriptBuilder.append("player.connect();");
-scriptBuilder.append("window.spotifyPlayer = player;");
-scriptBuilder.append("};");
-
-String script = scriptBuilder.toString();
-
-        // Load HTML content into the WebView
-        String htmlContent = "<html><head>" +
-        "<script src='https://sdk.scdn.co/spotify-player.js'></script>" +
-        "</head><body></body></html>";
-
-        webEngine.loadContent(htmlContent);
-
-        System.out.println(accessToken);
-        webEngine.getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
-            if (newValue == Worker.State.SUCCEEDED) {
-                // WebView is fully loaded, now inject your JavaScript code
-                webEngine.executeScript(script);
-            }
-        });
+        webEngine.load(getClass().getResource("spotify.html").toExternalForm());
         topVBox.getChildren().add(webView);
+        System.out.println(accessToken);
         
         } catch (Exception e) {
             e.printStackTrace();
@@ -511,5 +480,209 @@ String script = scriptBuilder.toString();
         }
     }
 
+    private static void exchangeCodeForPlaybackToken() {
+        try {
+            // Construct the token exchange request body for playback access token
+            String requestBody = "grant_type=authorization_code" +
+                    "&code=" + URLEncoder.encode(authorizationCode, "UTF-8") +
+                    "&redirect_uri=" + URLEncoder.encode(REDIRECT_URI, "UTF-8") +
+                    "&client_id=" + URLEncoder.encode(CLIENT_ID, "UTF-8") +
+                    "&client_secret=" + URLEncoder.encode(CLIENT_SECRET, "UTF-8") +
+                    "&scope=" + SPOTIFY_PLAYBACK_SCOPE;
+    
+            // Make a POST request to the token exchange URL for playback access token
+            URL tokenUrl = new URL(TOKEN_EXCHANGE_URL);
+            HttpURLConnection tokenConnection = (HttpURLConnection) tokenUrl.openConnection();
+            tokenConnection.setRequestMethod("POST");
+            tokenConnection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            tokenConnection.setDoOutput(true);
+    
+            // Write the request body to the connection
+            try (OutputStream os = tokenConnection.getOutputStream()) {
+                byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+    
+            int responseCode = tokenConnection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                // Parse the response to extract the playback access token
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(tokenConnection.getInputStream()))) {
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+    
+                    // Extract the playback access token from the JSON response
+                    // Note: In a real application, you would use a JSON parsing library like Gson
+                    playbackAccessToken = response.toString().split("\"access_token\":\"")[1].split("\"")[0];
+                    System.out.println("Playback Access Token: " + playbackAccessToken);
+                    tokenExchangeTask.isDone();
+                }
+            } else {
+                System.out.println("Playback Token Exchange Error: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Playback Token Exchange Exception: " + e.getMessage());
+        }
+    }
+
+    private  void playSpotifyTrack(String trackUri) {
+        try {
+            getAvailableDevices();
+            String deviceId = getActivatedDeviceId();
+            System.out.println("Playback Access Token: " + playbackAccessToken);
+            String jsonInputString = "{\"uris\": [\"" + trackUri + "\"], \"device_id\": \"" + deviceId + "\"}";
+            System.out.println("Request URL: " + "https://api.spotify.com/v1/me/player/play");
+System.out.println("Request Headers: Authorization: Bearer " + playbackAccessToken);
+System.out.println("Request Body: " + jsonInputString);
+            // Create a connection to the Spotify playback API
+            URL apiUrl = new URL("https://api.spotify.com/v1/me/player/play");
+            HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
+            connection.setRequestMethod("PUT");
+            connection.setRequestProperty("Authorization", "Bearer " + playbackAccessToken);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setDoOutput(true);
+    
+            // Write the JSON payload to the connection
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = jsonInputString.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+    
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+                System.out.println("Playback started successfully.");
+
+        
+            } else {
+                System.out.println("Error starting playback: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Playback API Exception: " + e.getMessage());
+        }
+    }
+
+    private static void getAvailableDevices() {
+        try {
+            URL apiUrl = new URL(SPOTIFY_AVAILABLE_DEVICES_API_URL);
+            HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("Authorization", "Bearer " + playbackAccessToken);
+    
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+    
+                    // Parse the JSON response to extract the list of devices
+                    JSONObject jsonResponse = new JSONObject(response.toString());
+                    devicesArray = jsonResponse.getJSONArray("devices");
+    
+                    // Print the devices for debugging (remove in production)
+                    System.out.println("Available Devices: " + devicesArray);
+    
+                    // Activate the desired device (e.g., the first device in the list)
+                    if (devicesArray.length() > 0) {
+                        String deviceIdToActivate = devicesArray.getJSONObject(0).getString("id");
+                        activateDevice(deviceIdToActivate);
+                    
+                        // Set the activated device ID
+                        activatedDeviceId = deviceIdToActivate;
+                    }
+                }
+            } else {
+                System.out.println("Error getting available devices: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Exception getting available devices: " + e.getMessage());
+        }
+    }
+    
+    // Method to retrieve the activated device ID
+    private static String getActivatedDeviceId() {
+        return activatedDeviceId;
+    }
+    private static void activateDevice(String deviceId) {
+        try {
+            // Build the URL for activating the device
+            String activateDeviceUrl = "https://api.spotify.com/v1/me/player";
+            URL apiUrl = new URL(activateDeviceUrl);
+            HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
+            connection.setRequestMethod("PUT");
+            connection.setRequestProperty("Authorization", "Bearer " + playbackAccessToken);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setDoOutput(true);
+    
+            // Write the JSON payload to the connection
+            try (OutputStream os = connection.getOutputStream()) {
+                String jsonInputString = "{\"device_ids\": [\"" + deviceId + "\"], \"play\": true}";
+                byte[] input = jsonInputString.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+    
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+                System.out.println("Device activation successful.");
+            } else {
+                System.out.println("Error activating device: " + responseCode);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Exception activating device: " + e.getMessage());
+        }
+    }
+    
+    private void initializeSpotifySDK() {
+
+        String sdkScript = "https://sdk.scdn.co/spotify-player.js";
+        String script = """
+                var script = document.createElement('script');
+                script.src = '%s';
+                script.onload = function() {
+                    console.log('Spotify SDK loaded');
+                    initializeSpotify('%s'); // Pass playbackAccessToken to the initialization function
+                };
+                document.head.appendChild(script);
+                
+                function initializeSpotify(playbackAccessToken) {
+                    // Your Spotify Web Playback SDK initialization code here
+                    var player = new Spotify.Player({
+                        name: 'Your Player Name',
+                        getOAuthToken: function (callback) {
+                            callback(playbackAccessToken);
+                        }
+                    });
+
+                    // Add event listeners and perform other SDK setup
+
+                    // Connect to the player
+                    player.connect();
+                }
+                """.formatted(sdkScript, playbackAccessToken);
+
+        // Load the HTML content containing the SDK initialization script
+        String htmlContent = """
+                <html>
+                <head>
+                    <title>Spotify SDK Initialization</title>
+                </head>
+                <body>
+                    <script>
+                        %s
+                    </script>
+                </body>
+                </html>
+                """.formatted(script);
+
+        webEngine.loadContent(htmlContent);
+    }
 }
 
